@@ -1,0 +1,12 @@
+URNA DO GREMIO - ELEICAO POR CARGOS
+
+1) Abra index.html no Chrome/Edge.
+2) Administração > senha inicial: 1234.
+3) Troque a senha imediatamente.
+4) Cadastre os cargos (Presidente, Vice-Presidente etc.).
+5) Em cada cargo, cadastre os estudantes, números e fotos.
+6) Na tela Votação, cada cargo é apresentado em sequência.
+7) A Apuração mostra os votos por cargo.
+
+SEGURANÇA:
+Este é um sistema local no navegador. A senha protege o painel dentro da aplicação e há bloqueios básicos de atalhos/context menu, mas isso NÃO substitui segurança de sistema/servidor. Para uma eleição oficial, use computador dedicado, conta do Windows protegida, sem acesso administrativo aos estudantes, e mantenha backup/registro da apuração.
