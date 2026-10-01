@@ -367,13 +367,16 @@ async function releaseNext(){
 
 async function loadResults(){
   try{
-    const votes=await api('/rest/v1/votos?select=cargo_id,candidato_id,tipo');
+    // A apuração usa uma RPC agregada para não expor os votos individuais ao navegador.
+    const rows=await api('/rest/v1/rpc/apurar_resultados',{method:'POST',body:'{}'});
     const counts={};
-    for(const v of votes){
-      if(!counts[v.cargo_id]) counts[v.cargo_id]={normal:{},branco:0,nulo:0};
-      if(v.tipo==='branco') counts[v.cargo_id].branco++;
-      else if(v.tipo==='nulo') counts[v.cargo_id].nulo++;
-      else counts[v.cargo_id].normal[v.candidato_id]=(counts[v.cargo_id].normal[v.candidato_id]||0)+1;
+    for(const r of (rows||[])){
+      const cargoId=Number(r.cargo_id);
+      if(!counts[cargoId]) counts[cargoId]={normal:{},branco:0,nulo:0};
+      const total=Number(r.total)||0;
+      if(r.tipo==='branco') counts[cargoId].branco+=total;
+      else if(r.tipo==='nulo') counts[cargoId].nulo+=total;
+      else if(r.candidato_id!=null) counts[cargoId].normal[Number(r.candidato_id)]=(counts[cargoId].normal[Number(r.candidato_id)]||0)+total;
     }
 
     let out='';
