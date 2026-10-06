@@ -165,8 +165,8 @@ function tocarBipConfirmacao(){
 
 const SUPABASE_URL = 'https://gevoydvmwgwmmivtescr.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_YeQOLfBF_u8ib_mdV0qnCw_9AUlG0-X';
-const COMPUTER_ID = 1;
-const COMPUTER_NAME = 'PC 01';
+let COMPUTER_ID = null;
+let COMPUTER_NAME = 'Não configurada';
 
 let cargos = [];
 let sessaoId = null;
@@ -354,30 +354,57 @@ async function confirmVote(){
 }
 
 async function responsibleLogin(){
-  const code=$('responsibleCode').value.trim();
-  /* Temporariamente, o código configurado no banco é URNA01.
-     A validação server-side do responsável deve ser adicionada antes da eleição oficial. */
-  if(code !== 'URNA01'){
-    alert('Código do responsável incorreto.');
-    return;
+  const code=$('responsibleCode').value.trim().toUpperCase();
+  if(!code) return alert('Digite o código do responsável.');
+
+  try{
+    const data=await api('/rest/v1/rpc/identificar_urna_responsavel',{
+      method:'POST',
+      body:JSON.stringify({p_codigo:code})
+    });
+
+    const row=Array.isArray(data) ? data[0] : data;
+    if(!row || !row.computador_id){
+      alert('Código do responsável incorreto ou urna inativa.');
+      return;
+    }
+
+    COMPUTER_ID=Number(row.computador_id);
+    COMPUTER_NAME=row.computador_nome;
+    responsibleLogged=true;
+    responsibleName=row.responsavel_nome;
+
+    $('respName').textContent=responsibleName;
+    $('pcName').textContent=COMPUTER_NAME;
+    $('computerLabel').textContent='Computador: '+COMPUTER_NAME;
+    $('responsibleLogin').classList.add('hide');
+    $('responsiblePanel').classList.remove('hide');
+    $('sessionStatus').textContent='Aguardando liberação.';
+    $('sessionStatus').className='status warn';
+    $('releaseBtn').disabled=false;
+
+    toast('Acesso autorizado — '+COMPUTER_NAME);
+  }catch(e){
+    alert('Não foi possível validar o responsável.\n\n'+e.message);
+    console.error(e);
   }
-  responsibleLogged=true;
-  responsibleName='Responsável 01';
-  $('respName').textContent=responsibleName;
-  $('responsibleLogin').classList.add('hide');
-  $('responsiblePanel').classList.remove('hide');
-  toast('Acesso autorizado');
 }
 
 function responsibleLogout(){
   responsibleLogged=false;
+  responsibleName='';
+  COMPUTER_ID=null;
+  COMPUTER_NAME='Não configurada';
   $('responsiblePanel').classList.add('hide');
   $('responsibleLogin').classList.remove('hide');
   $('responsibleCode').value='';
+  $('respName').textContent='—';
+  $('pcName').textContent='Não configurada';
+  $('computerLabel').textContent='Computador: Não configurada';
 }
 
 async function releaseNext(){
-  if(!responsibleLogged) return showResponsible();
+  if(!responsibleLogged || !COMPUTER_ID) return showResponsible();
   if(sessaoId) return alert('Já existe uma votação em andamento.');
 
   try{
@@ -576,8 +603,8 @@ document.addEventListener('contextmenu',e=>e.preventDefault());
 document.addEventListener('keydown',e=>{
   if(e.key==='F12'||(e.ctrlKey&&e.shiftKey&&['I','J','C'].includes(e.key.toUpperCase()))||(e.ctrlKey&&e.key.toUpperCase()==='U')) e.preventDefault();
 });
-$('computerLabel').textContent='Computador: '+COMPUTER_NAME;
-$('pcName').textContent=COMPUTER_NAME;
+$('computerLabel').textContent='Computador: Aguardando identificação';
+$('pcName').textContent='Aguardando responsável';
 loadElection();
 </script>
 </body>
