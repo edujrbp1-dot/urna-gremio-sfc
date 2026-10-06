@@ -39,6 +39,9 @@ input{width:100%;padding:12px;border:1px solid #aaa;border-radius:5px;font-size:
 table{width:100%;border-collapse:collapse}th,td{padding:9px;border-bottom:1px solid #ddd;text-align:left}
 .candidateImg{width:50px;height:50px;object-fit:cover;border-radius:4px;vertical-align:middle}
 #toast{position:fixed;bottom:20px;right:20px;background:#111;color:#fff;padding:13px 18px;border-radius:7px;display:none;z-index:99}
+#directorResults{margin-top:18px}
+.adminBadge{display:inline-block;padding:6px 10px;border-radius:999px;background:#dff3e5;font-weight:bold;font-size:13px}
+.exportNote{margin-top:10px;padding:10px;background:#f6f6f6;border-radius:6px;font-size:13px}
 .center{text-align:center}
 @media(max-width:800px){.urna{grid-template-columns:1fr}.photo{position:static;margin:15px auto}.screen{min-height:580px}}
 </style>
@@ -52,7 +55,7 @@ table{width:100%;border-collapse:collapse}th,td{padding:9px;border-bottom:1px so
 <nav>
   <button id="navVote" class="active" onclick="page('vote',this)">🗳️ Votação</button>
   <button onclick="page('admin',this)">🔐 Responsável</button>
-  <button onclick="page('result',this)">📊 Apuração</button>
+  <button onclick="showDirector()">👩‍💼 Diretora</button>
 </nav>
 
 <section id="vote" class="page active">
@@ -113,12 +116,30 @@ table{width:100%;border-collapse:collapse}th,td{padding:9px;border-bottom:1px so
   </div>
 </section>
 
-<section id="result" class="page">
-  <div class="card">
-    <h2>📊 Apuração</h2>
-    <p class="small">A apuração é carregada diretamente do banco central.</p>
-    <button class="primary" onclick="loadResults()">Atualizar apuração</button>
-    <div id="results"></div>
+<section id="director" class="page">
+  <div id="directorLogin" class="card">
+    <h2>👩‍💼 Administração da Eleição</h2>
+    <p class="small">Área exclusiva da Diretora.</p>
+    <input id="directorCode" type="password" inputmode="text" placeholder="Código da Diretora">
+    <br><br>
+    <button class="primary" onclick="directorLogin()">Entrar</button>
+  </div>
+
+  <div id="directorPanel" class="hide">
+    <div class="card">
+      <h2>📊 Apuração em tempo real</h2>
+      <p class="small">A diretora pode consultar a apuração durante a eleição.</p>
+      <button class="primary" onclick="loadDirectorResults()">🔄 Atualizar apuração</button>
+      <button class="gold" onclick="generateSpreadsheet()">📄 GERAR PLANILHA</button>
+      <button class="red" onclick="directorLogout()">Sair</button>
+      <div id="directorResults"></div>
+    </div>
+
+    <div class="card">
+      <h2>🧹 Zerar votação</h2>
+      <p class="small"><b>Atenção:</b> esta ação apaga os votos e as sessões de votação. Use somente para limpar testes antes da eleição.</p>
+      <button class="red" onclick="resetElection()">⚠️ ZERAR VOTAÇÃO</button>
+    </div>
   </div>
 </section>
 
@@ -198,7 +219,7 @@ function page(id,b){
   $(id).classList.add('active');
   document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));
   b.classList.add('active');
-  if(id==='result') loadResults();
+  if(id==='director' && directorLogged) loadDirectorResults();
 }
 
 function showResponsible(){
@@ -379,36 +400,169 @@ async function releaseNext(){
   }
 }
 
-async function loadResults(){
-  try{
-    // A apuração usa uma RPC agregada para não expor os votos individuais ao navegador.
-    const rows=await api('/rest/v1/rpc/apurar_resultados',{method:'POST',body:'{}'});
-    const counts={};
-    for(const r of (rows||[])){
-      const cargoId=Number(r.cargo_id);
-      if(!counts[cargoId]) counts[cargoId]={normal:{},branco:0,nulo:0};
-      const total=Number(r.total)||0;
-      if(r.tipo==='branco') counts[cargoId].branco+=total;
-      else if(r.tipo==='nulo') counts[cargoId].nulo+=total;
-      else if(r.candidato_id!=null) counts[cargoId].normal[Number(r.candidato_id)]=(counts[cargoId].normal[Number(r.candidato_id)]||0)+total;
-    }
+let directorLogged=false;
+let lastDirectorRows=[];
 
-    let out='';
-    for(const c of cargos){
-      const q=counts[c.id]||{normal:{},branco:0,nulo:0};
-      out+='<div class="card"><h3>'+esc(c.nome)+'</h3><table><tr><th>Número</th><th>Nome</th><th>Votos</th></tr>';
-      for(const x of c.candidates){
-        out+='<tr><td>'+displayNumber(c,x.numero)+'</td><td>'+esc(x.nome)+'</td><td>'+(q.normal[x.id]||0)+'</td></tr>';
-      }
-      out+='<tr><td colspan="2">Brancos</td><td>'+q.branco+'</td></tr>';
-      out+='<tr><td colspan="2">Nulos</td><td>'+q.nulo+'</td></tr></table></div>';
-    }
-    $('results').innerHTML=out||'<p>Nenhum dado.</p>';
+function showDirector(){
+  document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));
+  $('director').classList.add('active');
+  document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));
+  document.querySelector('nav button:nth-child(3)').classList.add('active');
+  if(!directorLogged){
+    $('directorLogin').classList.remove('hide');
+    $('directorPanel').classList.add('hide');
+    $('directorCode').focus();
+  }
+}
+
+async function directorLogin(){
+  const code=$('directorCode').value.trim();
+  if(!code) return alert('Digite o código da Diretora.');
+
+  try{
+    const rows=await api('/rest/v1/rpc/apurar_resultados_tempo_real_admin',{
+      method:'POST',
+      body:JSON.stringify({p_codigo:code})
+    });
+    directorLogged=true;
+    window.directorCode=code;
+    $('directorLogin').classList.add('hide');
+    $('directorPanel').classList.remove('hide');
+    toast('Acesso da Diretora autorizado');
+    renderDirectorResults(rows||[]);
   }catch(e){
-    $('results').innerHTML='<p>Não foi possível carregar a apuração.</p>';
+    alert('Código da Diretora inválido ou acesso não autorizado.');
     console.error(e);
   }
 }
+
+function directorLogout(){
+  directorLogged=false;
+  window.directorCode='';
+  $('directorPanel').classList.add('hide');
+  $('directorLogin').classList.remove('hide');
+  $('directorCode').value='';
+}
+
+async function loadDirectorResults(){
+  if(!directorLogged) return showDirector();
+  try{
+    const rows=await api('/rest/v1/rpc/apurar_resultados_tempo_real_admin',{
+      method:'POST',
+      body:JSON.stringify({p_codigo:window.directorCode})
+    });
+    renderDirectorResults(rows||[]);
+  }catch(e){
+    alert('Não foi possível atualizar a apuração.\n\n'+e.message);
+    console.error(e);
+  }
+}
+
+function renderDirectorResults(rows){
+  lastDirectorRows=rows||[];
+  const counts={};
+  for(const r of lastDirectorRows){
+    const cargoId=Number(r.cargo_id);
+    if(!counts[cargoId]) counts[cargoId]={normal:{},branco:0,nulo:0,total:0};
+    const total=Number(r.total)||0;
+    counts[cargoId].total+=total;
+    if(r.tipo==='branco') counts[cargoId].branco+=total;
+    else if(r.tipo==='nulo') counts[cargoId].nulo+=total;
+    else if(r.candidato_id!=null)
+      counts[cargoId].normal[Number(r.candidato_id)]=(counts[cargoId].normal[Number(r.candidato_id)]||0)+total;
+  }
+
+  let grand=0;
+  for(const c of cargos) grand += (counts[c.id]?.total||0);
+
+  let out='<div class="status ok"><span class="adminBadge">🔐 Diretora autorizada</span> &nbsp; Total de votos registrados: <b>'+grand+'</b></div>';
+  for(const c of cargos){
+    const q=counts[c.id]||{normal:{},branco:0,nulo:0,total:0};
+    out+='<div class="card"><h3>'+esc(c.nome)+'</h3><table><tr><th>Número</th><th>Nome</th><th>Votos</th></tr>';
+    for(const x of c.candidates){
+      out+='<tr><td>'+displayNumber(c,x.numero)+'</td><td>'+esc(x.nome)+'</td><td><b>'+(q.normal[x.id]||0)+'</b></td></tr>';
+    }
+    out+='<tr><td colspan="2">Brancos</td><td><b>'+q.branco+'</b></td></tr>';
+    out+='<tr><td colspan="2">Nulos</td><td><b>'+q.nulo+'</b></td></tr>';
+    out+='<tr><td colspan="2"><b>Total do cargo</b></td><td><b>'+q.total+'</b></td></tr></table></div>';
+  }
+  $('directorResults').innerHTML=out;
+}
+
+function csvEscape(v){
+  const s=String(v??'');
+  return '"'+s.replace(/"/g,'""')+'"';
+}
+
+function generateSpreadsheet(){
+  if(!directorLogged) return showDirector();
+
+  const counts={};
+  for(const r of lastDirectorRows){
+    const cargoId=Number(r.cargo_id);
+    if(!counts[cargoId]) counts[cargoId]={normal:{},branco:0,nulo:0};
+    const total=Number(r.total)||0;
+    if(r.tipo==='branco') counts[cargoId].branco+=total;
+    else if(r.tipo==='nulo') counts[cargoId].nulo+=total;
+    else if(r.candidato_id!=null)
+      counts[cargoId].normal[Number(r.candidato_id)]=(counts[cargoId].normal[Number(r.candidato_id)]||0)+total;
+  }
+
+  const now=new Date();
+  const stamp=now.toLocaleString('pt-BR');
+  const rows=[['APURAÇÃO DA ELEIÇÃO DO GRÊMIO ESTUDANTIL'],['Data/hora da geração',stamp],[],['Cargo','Número','Candidato','Turma','Votos']];
+
+  for(const c of cargos){
+    const q=counts[c.id]||{normal:{},branco:0,nulo:0};
+    for(const x of c.candidates){
+      rows.push([c.nome,displayNumber(c,x.numero).replaceAll(' ',''),x.nome,x.turma||'',q.normal[x.id]||0]);
+    }
+    rows.push([c.nome,'','VOTOS EM BRANCO','',q.branco]);
+    rows.push([c.nome,'','VOTOS NULOS','',q.nulo]);
+    rows.push([c.nome,'','TOTAL DO CARGO','',c.candidates.reduce((s,x)=>s+(q.normal[x.id]||0),0)+q.branco+q.nulo]);
+    rows.push([]);
+  }
+
+  const csv='\uFEFF'+rows.map(r=>r.map(csvEscape).join(';')).join('\r\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;
+  a.download='apuracao-gremio-'+now.toISOString().slice(0,19).replace(/[:T]/g,'-')+'.csv';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  toast('Planilha gerada!');
+}
+
+async function resetElection(){
+  if(!directorLogged) return showDirector();
+
+  const first=confirm('ATENÇÃO!\n\nIsso apagará todos os votos e sessões de votação do banco.\n\nUse somente para limpar os testes antes da eleição.\n\nDeseja continuar?');
+  if(!first) return;
+
+  const typed=prompt('Para confirmar, digite exatamente: ZERAR');
+  if(typed!=='ZERAR') return alert('Operação cancelada.');
+
+  try{
+    await api('/rest/v1/rpc/zerar_votacao',{
+      method:'POST',
+      body:JSON.stringify({
+        p_codigo:window.directorCode,
+        p_confirmacao:'ZERAR'
+      })
+    });
+    lastDirectorRows=[];
+    renderDirectorResults([]);
+    toast('VOTAÇÃO ZERADA COM SUCESSO');
+    alert('A votação foi zerada. Candidatos e cargos foram mantidos.');
+  }catch(e){
+    alert('Não foi possível zerar a votação.\n\n'+e.message);
+    console.error(e);
+  }
+}
+
 
 function esc(x){
   return String(x??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
