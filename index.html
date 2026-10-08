@@ -42,7 +42,14 @@ table{width:100%;border-collapse:collapse}th,td{padding:9px;border-bottom:1px so
 #directorResults{margin-top:18px}
 .adminBadge{display:inline-block;padding:6px 10px;border-radius:999px;background:#dff3e5;font-weight:bold;font-size:13px}
 .exportNote{margin-top:10px;padding:10px;background:#f6f6f6;border-radius:6px;font-size:13px}
-.center{text-align:center}
+.photoPreview{width:150px;height:180px;border:2px dashed #aaa;border-radius:8px;background:#f4f4f4;display:flex;align-items:center;justify-content:center;overflow:hidden;margin-top:10px;text-align:center;color:#777}.photoPreview img{width:100%;height:100%;object-fit:cover}.center{text-align:center}
+select{border:1px solid #aaa;border-radius:5px;background:#fff}
+.techGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.techCard{border:1px solid #ddd;border-radius:8px;padding:14px;background:#fafafa}
+.techOnline{border-left:6px solid #138a45}
+.techBusy{border-left:6px solid #c9a227}
+.techClosed{border-left:6px solid #777}
+@media(max-width:800px){.techGrid{grid-template-columns:1fr}}
 @media(max-width:800px){.urna{grid-template-columns:1fr}.photo{position:static;margin:15px auto}.screen{min-height:580px}}
 </style>
 </head>
@@ -56,6 +63,7 @@ table{width:100%;border-collapse:collapse}th,td{padding:9px;border-bottom:1px so
   <button id="navVote" class="active" onclick="page('vote',this)">🗳️ Votação</button>
   <button onclick="page('admin',this)">🔐 Responsável</button>
   <button onclick="showDirector()">👩‍💼 Diretora</button>
+  <button onclick="showTechnician()">🔧 Técnico</button>
 </nav>
 
 <section id="vote" class="page active">
@@ -104,6 +112,11 @@ table{width:100%;border-collapse:collapse}th,td{padding:9px;border-bottom:1px so
     <div class="card">
       <h2>🖥️ Controle da urna</h2>
       <div id="sessionStatus" class="status warn">Aguardando liberação.</div>
+      <div id="recoveryBox" class="hide" style="margin:12px 0;padding:14px;border-radius:8px;background:#fff2cc">
+        <b>🔄 VOTAÇÃO EM ANDAMENTO ENCONTRADA</b>
+        <p id="recoveryInfo" class="small" style="margin:8px 0"></p>
+        <button class="primary" onclick="resumeActiveSession()">▶️ CONTINUAR VOTAÇÃO</button>
+      </div>
       <button id="releaseBtn" class="gold" onclick="releaseNext()">🟢 LIBERAR PRÓXIMA VOTAÇÃO</button>
       <button class="red" onclick="responsibleLogout()">Sair</button>
     </div>
@@ -139,6 +152,76 @@ table{width:100%;border-collapse:collapse}th,td{padding:9px;border-bottom:1px so
       <h2>🧹 Zerar votação</h2>
       <p class="small"><b>Atenção:</b> esta ação apaga os votos e as sessões de votação. Use somente para limpar testes antes da eleição.</p>
       <button class="red" onclick="resetElection()">⚠️ ZERAR VOTAÇÃO</button>
+    </div>
+  </div>
+</section>
+
+<section id="technician" class="page">
+  <div id="technicianLogin" class="card">
+    <h2>🔧 Painel Técnico</h2>
+    <p class="small">Área exclusiva para manutenção da urna, candidatos e cargos.</p>
+    <input id="technicianCode" type="password" inputmode="text" placeholder="Código técnico">
+    <br><br>
+    <button class="primary" onclick="technicianLogin()">Entrar</button>
+  </div>
+
+  <div id="technicianPanel" class="hide">
+    <div class="card">
+      <h2>🖥️ Monitor das urnas</h2>
+      <p class="small">Atualize para ver as sessões atuais das três urnas.</p>
+      <button class="primary" onclick="loadTechnicianStatus()">🔄 Atualizar status</button>
+      <button class="red" onclick="technicianLogout()">Sair</button>
+      <div id="technicianStatus" style="margin-top:16px"></div>
+    </div>
+
+    <div class="card">
+      <h2>🛡️ Segurança da eleição</h2>
+      <div id="configLockStatus" class="status warn">Verificando estado das configurações...</div>
+      <p class="small">Quando bloqueado, não será possível adicionar, editar ou desativar candidatos e cargos. A votação continua normalmente.</p>
+      <button id="configLockBtn" class="gold" onclick="toggleConfigLock()">🔒 BLOQUEAR CONFIGURAÇÕES</button>
+      <button class="primary" onclick="loadConfigLock()">🔄 Atualizar</button>
+    </div>
+
+    <div class="card">
+      <h2>👥 Candidatos</h2>
+      <button id="addCandidateBtn" class="primary" onclick="openCandidateForm()">➕ Adicionar candidato</button>
+      <div id="candidateForm" class="hide" style="margin-top:16px">
+        <input type="hidden" id="candidateId">
+        <label>Nome</label><input id="candidateName" placeholder="Nome do candidato">
+        <br><br><label>Turma</label><input id="candidateClass" placeholder="Ex.: 8º Ano B">
+        <br><br><label>Cargo</label><select id="candidateCargo" style="width:100%;padding:12px;font-size:18px"></select>
+        <br><br><label>Número</label><input id="candidateNumber" type="number" min="0" max="999" placeholder="Número">
+        <br><br><label>Foto do candidato</label>
+        <input id="candidatePhotoFile" type="file" accept="image/png,image/jpeg,image/webp" onchange="previewCandidatePhoto(event)">
+        <input id="candidatePhotoUrl" type="hidden">
+        <div id="candidatePhotoPreview" class="photoPreview">Sem foto selecionada</div>
+        <p class="small">JPG, PNG ou WEBP — máximo de 5 MB.</p>
+        <br>
+        <button class="gold" onclick="saveCandidate()">💾 Salvar</button>
+        <button onclick="closeCandidateForm()">Cancelar</button>
+      </div>
+      <div id="candidateTable" style="margin-top:16px"></div>
+    </div>
+
+    <div class="card">
+      <h2>📋 Histórico de ações</h2>
+      <p class="small">Registro das principais ações realizadas pelo painel técnico.</p>
+      <button class="primary" onclick="loadTechnicianAudit()">🔄 Atualizar histórico</button>
+      <div id="technicianAudit" style="margin-top:16px"></div>
+    </div>
+
+    <div class="card">
+      <h2>🎯 Cargos</h2>
+      <button id="addCargoBtn" class="primary" onclick="openCargoForm()">➕ Adicionar cargo</button>
+      <div id="cargoForm" class="hide" style="margin-top:16px">
+        <input type="hidden" id="cargoId">
+        <label>Nome do cargo</label><input id="cargoName" placeholder="Nome do cargo">
+        <br><br><label>Quantidade de dígitos</label>
+        <select id="cargoDigits" style="width:100%;padding:12px;font-size:18px"><option value="1">1 dígito</option><option value="2">2 dígitos</option><option value="3" selected>3 dígitos</option></select>
+        <br><br><button class="gold" onclick="saveCargo()">💾 Salvar cargo</button>
+        <button onclick="closeCargoForm()">Cancelar</button>
+      </div>
+      <div id="cargoTable" style="margin-top:16px"></div>
     </div>
   </div>
 </section>
@@ -382,12 +465,68 @@ async function responsibleLogin(){
     $('sessionStatus').textContent='Aguardando liberação.';
     $('sessionStatus').className='status warn';
     $('releaseBtn').disabled=false;
+    $('recoveryBox').classList.add('hide');
 
     toast('Acesso autorizado — '+COMPUTER_NAME);
+    await checkActiveSession();
   }catch(e){
     alert('Não foi possível validar o responsável.\n\n'+e.message);
     console.error(e);
   }
+}
+
+
+async function checkActiveSession(){
+  if(!responsibleLogged || !COMPUTER_ID) return;
+  try{
+    const data=await api('/rest/v1/rpc/recuperar_votacao_ativa',{
+      method:'POST',
+      body:JSON.stringify({p_computador_id:Number(COMPUTER_ID)})
+    });
+    const row=Array.isArray(data) ? data[0] : data;
+
+    if(!row || !row.sessao_id){
+      $('recoveryBox').classList.add('hide');
+      $('releaseBtn').disabled=false;
+      return;
+    }
+
+    sessaoId=Number(row.sessao_id);
+    const nextCargoId=row.proximo_cargo_id==null ? null : Number(row.proximo_cargo_id);
+    const idx=cargos.findIndex(c=>Number(c.id)===nextCargoId);
+    currentIndex=idx>=0 ? idx : 0;
+    typed='';
+    blankVote=false;
+    $('releaseBtn').disabled=true;
+    $('recoveryInfo').textContent='Sessão #'+sessaoId+' encontrada com '+Number(row.votos_registrados||0)+' de '+cargos.length+' cargos registrados.';
+    $('recoveryBox').classList.remove('hide');
+    $('sessionStatus').textContent='Existe uma votação em andamento nesta urna.';
+    $('sessionStatus').className='status warn';
+  }catch(e){
+    console.error('Falha ao verificar sessão ativa:',e);
+  }
+}
+
+async function resumeActiveSession(){
+  if(!sessaoId) return checkActiveSession();
+  const remaining=cargos.length-currentIndex;
+  if(remaining<=0){
+    try{
+      await api('/rest/v1/rpc/finalizar_votacao',{method:'POST',body:JSON.stringify({p_sessao_id:Number(sessaoId)})});
+      sessaoId=null; currentIndex=0;
+      $('recoveryBox').classList.add('hide');
+      $('releaseBtn').disabled=false;
+      $('sessionStatus').textContent='Sessão recuperada e finalizada.';
+      $('sessionStatus').className='status ok';
+      return;
+    }catch(e){ return alert('Não foi possível finalizar a sessão recuperada.\n\n'+e.message); }
+  }
+  $('recoveryBox').classList.add('hide');
+  $('sessionStatus').textContent='Sessão recuperada — continuando do cargo '+(currentIndex+1)+' de '+cargos.length+'.';
+  $('sessionStatus').className='status ok';
+  page('vote',$('navVote'));
+  renderVote();
+  speak('Votação recuperada. Continue de onde parou.');
 }
 
 function responsibleLogout(){
@@ -590,6 +729,346 @@ async function resetElection(){
   }
 }
 
+
+let technicianLogged=false;
+let technicianCode='';
+let configLocked=false;
+
+function showTechnician(){
+  document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));
+  $('technician').classList.add('active');
+  document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));
+  document.querySelector('nav button:nth-child(4)').classList.add('active');
+  if(!technicianLogged){
+    $('technicianLogin').classList.remove('hide');
+    $('technicianPanel').classList.add('hide');
+    $('technicianCode').focus();
+  }
+}
+
+async function technicianLogin(){
+  const code=$('technicianCode').value;
+  if(!code) return alert('Digite o código técnico.');
+  try{
+    const data=await api('/rest/v1/rpc/login_tecnico',{method:'POST',body:JSON.stringify({p_codigo:code})});
+    const row=Array.isArray(data)?data[0]:data;
+    if(!row || !row.tecnico_id) return alert('Código técnico inválido.');
+    technicianLogged=true;
+    technicianCode=code;
+    $('technicianLogin').classList.add('hide');
+    $('technicianPanel').classList.remove('hide');
+    populateTechnicianForms();
+    await loadTechnicianStatus();
+    await loadConfigLock();
+    await loadTechnicianAudit();
+    toast('Acesso técnico autorizado');
+  }catch(e){ alert('Não foi possível entrar no painel técnico.\n\n'+e.message); }
+}
+
+function technicianLogout(){
+  technicianLogged=false; technicianCode='';
+  configLocked=false;
+  $('technicianPanel').classList.add('hide');
+  $('technicianLogin').classList.remove('hide');
+  $('technicianCode').value='';
+}
+
+async function loadConfigLock(){
+  if(!technicianLogged) return;
+  try{
+    const data=await api('/rest/v1/rpc/tecnico_status_bloqueio',{method:'POST',body:JSON.stringify({p_codigo:technicianCode})});
+    const row=Array.isArray(data)?data[0]:data;
+    configLocked=!!row?.configuracoes_bloqueadas;
+    const status=$('configLockStatus');
+    const btn=$('configLockBtn');
+    if(configLocked){
+      status.textContent='🔒 CONFIGURAÇÕES BLOQUEADAS';
+      status.className='status warn';
+      btn.textContent='🔓 DESBLOQUEAR CONFIGURAÇÕES';
+      btn.className='primary';
+    }else{
+      status.textContent='🔓 CONFIGURAÇÕES LIBERADAS';
+      status.className='status ok';
+      btn.textContent='🔒 BLOQUEAR CONFIGURAÇÕES';
+      btn.className='gold';
+    }
+    applyConfigLockUI();
+  }catch(e){
+    $('configLockStatus').textContent='Erro ao consultar o bloqueio: '+e.message;
+    $('configLockStatus').className='status warn';
+  }
+}
+
+function applyConfigLockUI(){
+  const disabled=configLocked;
+  ['addCandidateBtn','addCargoBtn'].forEach(id=>{ if($(id)) $(id).disabled=disabled; });
+  if($('candidateForm') && disabled) closeCandidateForm();
+  if($('cargoForm') && disabled) closeCargoForm();
+  document.querySelectorAll('#candidateTable button, #cargoTable button').forEach(btn=>{
+    btn.disabled=disabled;
+    btn.style.opacity=disabled?'0.5':'';
+    btn.style.cursor=disabled?'not-allowed':'';
+  });
+}
+
+async function toggleConfigLock(){
+  if(!technicianLogged) return showTechnician();
+  const willLock=!configLocked;
+  const msg=willLock
+    ? 'Bloquear as configurações?\n\nDepois disso, candidatos e cargos não poderão ser adicionados, editados ou desativados até o desbloqueio.'
+    : 'Desbloquear as configurações?\n\nIsso permitirá alterações em candidatos e cargos novamente.';
+  if(!confirm(msg)) return;
+  try{
+    await api('/rest/v1/rpc/tecnico_alterar_bloqueio',{method:'POST',body:JSON.stringify({p_codigo:technicianCode,p_bloquear:willLock})});
+    configLocked=willLock;
+    await loadConfigLock();
+    await loadTechnicianAudit();
+    toast(willLock?'🔒 Configurações bloqueadas.':'🔓 Configurações desbloqueadas.');
+  }catch(e){
+    alert('Não foi possível alterar o bloqueio.\n\n'+e.message);
+  }
+}
+
+async function loadTechnicianStatus(){
+  if(!technicianLogged) return;
+  try{
+    const rows=await api('/rest/v1/rpc/tecnico_status_urnas',{method:'POST',body:JSON.stringify({p_codigo:technicianCode})});
+    let out='<div class="techGrid">';
+    for(const r of rows||[]){
+      const busy=r.status==='votando';
+      const cls=busy?'techBusy':(r.status==='finalizada'?'techClosed':'techOnline');
+      const label=busy?'🟡 VOTANDO':(r.status==='finalizada'?'⚪ FINALIZADA':'🟢 DISPONÍVEL');
+      out+=`<div class="techCard ${cls}"><h3>${esc(r.computador_nome||'Urna')}</h3><p><b>${label}</b></p><p>Responsável: ${esc(r.responsavel_nome||'—')}</p><p>Sessão: ${r.sessao_id??'—'}</p><p>Votos: <b>${Number(r.votos_registrados||0)}</b></p>`;
+      if(busy) out+=`<button class="red" onclick="cancelTechnicianSession(${Number(r.computador_id)})">🛑 CANCELAR VOTAÇÃO</button>`;
+      out+='</div>';
+    }
+    out+='</div>';
+    $('technicianStatus').innerHTML=out;
+  }catch(e){ $('technicianStatus').innerHTML='<div class="status warn">Erro: '+esc(e.message)+'</div>'; }
+}
+
+async function cancelTechnicianSession(computadorId){
+  if(!confirm('Cancelar a sessão atual desta urna?\n\nSe houver votos parciais nessa sessão, eles serão descartados.')) return;
+  try{
+    await api('/rest/v1/rpc/tecnico_cancelar_votacao',{method:'POST',body:JSON.stringify({p_codigo:technicianCode,p_computador_id:Number(computadorId)})});
+    await registrarAuditoria('CANCELAR_VOTACAO', 'computador_id='+Number(computadorId));
+    toast('Sessão cancelada e urna recuperada.');
+    await loadTechnicianStatus();
+    await loadTechnicianAudit();
+  }catch(e){ alert('Não foi possível cancelar a sessão.\n\n'+e.message); }
+}
+
+async function registrarAuditoria(acao, detalhes=''){
+  if(!technicianLogged || !technicianCode) return;
+  try{
+    await api('/rest/v1/rpc/tecnico_registrar_auditoria',{
+      method:'POST',
+      body:JSON.stringify({
+        p_codigo:technicianCode,
+        p_acao:acao,
+        p_detalhes:detalhes||null
+      })
+    });
+  }catch(e){
+    console.warn('Falha ao registrar auditoria:',e);
+  }
+}
+
+async function loadTechnicianAudit(){
+  if(!technicianLogged) return;
+  try{
+    const rows=await api('/rest/v1/rpc/tecnico_listar_auditoria',{
+      method:'POST',
+      body:JSON.stringify({p_codigo:technicianCode})
+    });
+    if(!rows || !rows.length){
+      $('technicianAudit').innerHTML='<p class="small">Nenhuma ação registrada ainda.</p>';
+      return;
+    }
+    let out='<div style="overflow:auto"><table><tr><th>Data/hora</th><th>Técnico</th><th>Ação</th><th>Detalhes</th></tr>';
+    for(const r of rows){
+      const data=r.criado_em ? new Date(r.criado_em).toLocaleString('pt-BR') : '—';
+      out+='<tr><td>'+esc(data)+'</td><td>'+esc(r.tecnico_nome||'—')+'</td><td><b>'+esc(r.acao||'—')+'</b></td><td>'+esc(r.detalhes||'—')+'</td></tr>';
+    }
+    out+='</table></div>';
+    $('technicianAudit').innerHTML=out;
+  }catch(e){
+    $('technicianAudit').innerHTML='<div class="status warn">Não foi possível carregar o histórico: '+esc(e.message)+'</div>';
+  }
+}
+
+function populateTechnicianForms(){
+  const sel=$('candidateCargo');
+  sel.innerHTML=cargos.map(c=>`<option value="${Number(c.id)}">${esc(c.nome)}</option>`).join('');
+  renderCandidateTable(); renderCargoTable();
+}
+
+function openCandidateForm(id=null){
+  if(!technicianLogged) return showTechnician();
+  if(configLocked) return alert('As configurações da eleição estão bloqueadas.');
+  $('candidateForm').classList.remove('hide');
+  if(id==null){
+    $('candidateId').value=''; $('candidateName').value=''; $('candidateClass').value=''; $('candidateNumber').value='';
+    $('candidatePhotoUrl').value=''; $('candidatePhotoFile').value='';
+    $('candidatePhotoPreview').innerHTML='Sem foto selecionada';
+    if(cargos[0]) $('candidateCargo').value=cargos[0].id;
+  }
+}
+function closeCandidateForm(){ $('candidateForm').classList.add('hide'); }
+
+function previewCandidatePhoto(event){
+  const file=event.target.files?.[0];
+  const preview=$('candidatePhotoPreview');
+  if(!file){ preview.innerHTML='Sem foto selecionada'; return; }
+  if(!['image/jpeg','image/png','image/webp'].includes(file.type)){
+    alert('Escolha uma imagem JPG, PNG ou WEBP.');
+    event.target.value=''; preview.innerHTML='Sem foto selecionada'; return;
+  }
+  if(file.size > 5*1024*1024){
+    alert('A foto deve ter no máximo 5 MB.');
+    event.target.value=''; preview.innerHTML='Sem foto selecionada'; return;
+  }
+  const url=URL.createObjectURL(file);
+  preview.innerHTML='<img src="'+escAttr(url)+'" alt="Prévia da foto">';
+}
+
+async function uploadCandidatePhoto(file, candidateId){
+  if(!file) return $('candidatePhotoUrl').value || '';
+  if(!['image/jpeg','image/png','image/webp'].includes(file.type)) throw new Error('Formato de foto não permitido. Use JPG, PNG ou WEBP.');
+  if(file.size > 5*1024*1024) throw new Error('A foto deve ter no máximo 5 MB.');
+
+  const ext = file.type==='image/png' ? 'png' : (file.type==='image/webp' ? 'webp' : 'jpg');
+  const path = 'candidatos/'+String(candidateId)+'-'+Date.now()+'.'+ext;
+  const r = await fetch(SUPABASE_URL + '/storage/v1/object/fotos-candidatos/' + path, {
+    method:'POST',
+    headers:{
+      'apikey':SUPABASE_KEY,
+      'Authorization':'Bearer '+SUPABASE_KEY,
+      'Content-Type':file.type,
+      'x-upsert':'false'
+    },
+    body:file
+  });
+  const text=await r.text();
+  let data; try{data=text?JSON.parse(text):null}catch{data=text}
+  if(!r.ok){
+    const msg=data?.message||data?.error||data?.statusCode||text||'Falha no upload da foto';
+    throw new Error(msg);
+  }
+  return SUPABASE_URL + '/storage/v1/object/public/fotos-candidatos/' + path;
+}
+
+function renderCandidateTable(){
+  let out='<table><tr><th>Cargo</th><th>Número</th><th>Nome</th><th>Turma</th><th>Ações</th></tr>';
+  for(const c of cargos) for(const x of c.candidates){
+    out+=`<tr><td>${esc(c.nome)}</td><td>${displayNumber(c,x.numero)}</td><td>${esc(x.nome)}</td><td>${esc(x.turma||'')}</td><td><button onclick="editCandidate(${Number(x.id)})">✏️</button> <button class="red" onclick="removeCandidate(${Number(x.id)})">Desativar</button></td></tr>`;
+  }
+  out+='</table>';
+  $('candidateTable').innerHTML=out;
+  applyConfigLockUI();
+}
+
+function editCandidate(id){
+  for(const c of cargos){
+    const x=c.candidates.find(y=>Number(y.id)===Number(id));
+    if(x){
+      openCandidateForm(id);
+      $('candidateId').value=x.id;
+      $('candidateName').value=x.nome||'';
+      $('candidateClass').value=x.turma||'';
+      $('candidateCargo').value=c.id;
+      $('candidateNumber').value=x.numero;
+      $('candidatePhotoUrl').value=x.foto_url||'';
+      $('candidatePhotoFile').value='';
+      $('candidatePhotoPreview').innerHTML=x.foto_url ? '<img src="'+escAttr(x.foto_url)+'" alt="Foto atual">' : 'Sem foto cadastrada';
+      return;
+    }
+  }
+}
+
+async function saveCandidate(){
+  if(configLocked) return alert('As configurações da eleição estão bloqueadas.');
+  const id=$('candidateId').value;
+  const file=$('candidatePhotoFile').files?.[0] || null;
+  const payload={p_codigo:technicianCode,p_cargo_id:Number($('candidateCargo').value),p_numero:$('candidateNumber').value.trim(),p_nome:$('candidateName').value,p_turma:$('candidateClass').value,p_foto_url:$('candidatePhotoUrl').value||null};
+  if(!payload.p_nome.trim()) return alert('Informe o nome.');
+  if(!/^\d+$/.test(payload.p_numero)) return alert('Informe um número válido.');
+  try{
+    let candidateId=Number(id)||null;
+
+    if(!candidateId){
+      const created=await api('/rest/v1/rpc/tecnico_adicionar_candidato',{method:'POST',body:JSON.stringify({...payload,p_foto_url:null})});
+      candidateId=Number(Array.isArray(created)?created[0]:created);
+      if(!candidateId) throw new Error('O candidato foi criado, mas o ID não foi retornado.');
+    }
+
+    if(file){
+      payload.p_foto_url=await uploadCandidatePhoto(file,candidateId);
+    }
+
+    if(id || file){
+      payload.p_candidato_id=candidateId;
+      await api('/rest/v1/rpc/tecnico_editar_candidato',{method:'POST',body:JSON.stringify(payload)});
+    }
+
+    await registrarAuditoria(id?'EDITAR_CANDIDATO':'ADICIONAR_CANDIDATO', 'candidato_id='+candidateId+'; numero='+payload.p_numero+'; nome='+payload.p_nome.trim());
+    closeCandidateForm();
+    await loadElection();
+    populateTechnicianForms();
+    await loadTechnicianAudit();
+    toast(id?'Candidato atualizado!':'Candidato adicionado!');
+  }catch(e){
+    alert('Não foi possível salvar o candidato.\n\n'+e.message);
+    console.error(e);
+  }
+}
+
+async function removeCandidate(id){
+  if(configLocked) return alert('As configurações da eleição estão bloqueadas.');
+  if(!confirm('Desativar este candidato? Ele deixará de aparecer na votação.')) return;
+  try{
+    await api('/rest/v1/rpc/tecnico_remover_candidato',{method:'POST',body:JSON.stringify({p_codigo:technicianCode,p_candidato_id:Number(id)})});
+    await registrarAuditoria('DESATIVAR_CANDIDATO', 'candidato_id='+Number(id));
+    await loadElection(); populateTechnicianForms(); await loadTechnicianAudit(); toast('Candidato desativado.');
+  }catch(e){ alert('Não foi possível desativar o candidato.\n\n'+e.message); }
+}
+
+function openCargoForm(id=null){
+  if(configLocked) return alert('As configurações da eleição estão bloqueadas.');
+  $('cargoForm').classList.remove('hide');
+  if(id==null){ $('cargoId').value=''; $('cargoName').value=''; $('cargoDigits').value='3'; }
+}
+function closeCargoForm(){ $('cargoForm').classList.add('hide'); }
+function renderCargoTable(){
+  let out='<table><tr><th>ID</th><th>Cargo</th><th>Dígitos</th><th>Ações</th></tr>';
+  for(const c of cargos) out+=`<tr><td>${Number(c.id)}</td><td>${esc(c.nome)}</td><td>${Number(c.numero_digitos)}</td><td><button onclick="editCargo(${Number(c.id)})">✏️</button> <button class="red" onclick="removeCargo(${Number(c.id)})">Desativar</button></td></tr>`;
+  out+='</table>'; $('cargoTable').innerHTML=out;
+  applyConfigLockUI();
+}
+function editCargo(id){ const c=cargos.find(x=>Number(x.id)===Number(id)); if(!c)return; openCargoForm(id); $('cargoId').value=c.id; $('cargoName').value=c.nome; $('cargoDigits').value=c.numero_digitos; }
+async function saveCargo(){
+  if(configLocked) return alert('As configurações da eleição estão bloqueadas.');
+  const id=$('cargoId').value;
+  const payload={p_codigo:technicianCode,p_nome:$('cargoName').value,p_numero_digitos:Number($('cargoDigits').value)};
+  if(!payload.p_nome.trim()) return alert('Informe o nome do cargo.');
+  try{
+    const fn=id?'tecnico_editar_cargo':'tecnico_adicionar_cargo';
+    if(id) payload.p_cargo_id=Number(id);
+    const cargoResult=await api('/rest/v1/rpc/'+fn,{method:'POST',body:JSON.stringify(payload)});
+    const cargoId=id?Number(id):(Array.isArray(cargoResult)?Number(cargoResult[0]):Number(cargoResult));
+    await registrarAuditoria(id?'EDITAR_CARGO':'ADICIONAR_CARGO', 'cargo_id='+(cargoId||'—')+'; nome='+payload.p_nome.trim());
+    closeCargoForm(); await loadElection(); populateTechnicianForms(); await loadTechnicianAudit(); toast(id?'Cargo atualizado!':'Cargo adicionado!');
+  }catch(e){ alert('Não foi possível salvar o cargo.\n\n'+e.message); }
+}
+async function removeCargo(id){
+  if(configLocked) return alert('As configurações da eleição estão bloqueadas.');
+  if(!confirm('Desativar este cargo? Ele deixará de fazer parte da votação.')) return;
+  try{
+    await api('/rest/v1/rpc/tecnico_remover_cargo',{method:'POST',body:JSON.stringify({p_codigo:technicianCode,p_cargo_id:Number(id)})});
+    await registrarAuditoria('DESATIVAR_CARGO', 'cargo_id='+Number(id));
+    await loadElection(); populateTechnicianForms(); await loadTechnicianAudit(); toast('Cargo desativado.');
+  }catch(e){ alert('Não foi possível desativar o cargo.\n\n'+e.message); }
+}
 
 function esc(x){
   return String(x??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
